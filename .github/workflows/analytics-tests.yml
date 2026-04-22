@@ -1,0 +1,80 @@
+# .github/workflows/analytics-tests.yml
+#
+# CI workflow: runs the Python analytics unit tests on every push and PR
+# that touches the analytics scripts or the test suite itself.
+#
+# Mirrors the Python version pinned in the build system (3.11.9).
+
+name: Analytics Tests
+
+on:
+  push:
+    paths:
+      - "fincept-cpp/scripts/Analytics/**"
+      - ".github/workflows/analytics-tests.yml"
+  pull_request:
+    paths:
+      - "fincept-cpp/scripts/Analytics/**"
+      - ".github/workflows/analytics-tests.yml"
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-14]
+        python-version: ["3.11.9"]
+        # Uncomment to also test against newer Python:
+        # python-version: ["3.11.9", "3.12.x"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+
+      - name: Run analytics unit tests
+        working-directory: fincept-cpp/scripts/Analytics
+        run: |
+          pytest tests/ \
+            --cov=analytics_core \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=85
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: fincept-cpp/scripts/Analytics/coverage.xml
+          retention-days: 14
+
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.9"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint analytics scripts
+        run: ruff check fincept-cpp/scripts/Analytics/
